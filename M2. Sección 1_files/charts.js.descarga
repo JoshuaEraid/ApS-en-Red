@@ -1,0 +1,864 @@
+var createdStudentProgressAriaTable = false;
+
+// Change Dropdown into Paragraph if only 1 option
+$(function() {
+  $("select").each(function(index) {
+    if ($(this).find('option').size() <= 1) {
+      $(this).after('<p>' + $(this).find('option').text() + '</p>');
+      $(this).hide();
+    }
+  });
+});
+
+// Internal: ensure a Shadow DOM mount for Highcharts to isolate from global CSS
+function getHighchartsShadowMount(hostElement) {
+  if (!hostElement) return null;
+
+  var shadow = hostElement.shadowRoot;
+  if (!shadow) {
+    shadow = hostElement.attachShadow({ mode: 'open' });
+  }
+  var mount = shadow.querySelector('#hc');
+
+  if (!mount) {
+    var style = document.createElement('style');
+    style.textContent = ':host{all:initial;display:inline-block} div,svg{all:unset}';
+    shadow.appendChild(style);
+
+    mount = document.createElement('div');
+    mount.id = 'hc';
+    shadow.appendChild(mount);
+  }
+
+  return mount;
+}
+
+// grades chart
+
+function grades_chart(chart_id, new_data) {
+  var host = document.getElementById(chart_id);
+  if (!host) return;
+  var mount = getHighchartsShadowMount(host);
+  if (!mount) return;
+
+  new Highcharts.Chart({
+    chart: {
+      renderTo: mount,
+      backgroundColor: 'transparent',
+      plotBorderWidth: null,
+      plotShadow: false,
+      width: 42,
+      height: 42,
+      margin: [-10,0,-10,0]
+    },
+    title: {
+      text: null
+    },
+    tooltip: {
+      enabled: false
+    },
+    plotOptions: {
+      pie: {
+        allowPointSelect: false,
+        innerSize: '35%%',
+        borderColor: 'rgba(0, 0, 0, .3)',
+        states: {
+          inactive: {
+            opacity: .8
+          },
+          hover: {
+            enabled:false
+          }
+        }
+      },
+      series: {
+        stacking: 'percent',
+        animation: false
+      }
+    },
+    legend: {
+      enabled: false
+    },
+    series: [{
+      type: 'pie',
+      name: 'Progress',
+      data: new_data,
+      dataLabels: {enabled: false}
+    }],
+    credits: {
+      enabled: false
+    }
+  });
+}
+
+// game progress pies
+
+function game_progress(chart_id, data, circleWidth) {
+  var new_data = [];
+
+  for (var i = 0; i < data.length; i++) {
+    new_data.push({color: data[i].color, y: data[i].y});
+  }
+
+  new Highcharts.Chart({
+    chart: {
+      renderTo: chart_id,
+      backgroundColor: 'transparent',
+      width: circleWidth,
+      height: 81,
+      margin: [-5,0,-10,0]
+    },
+    title: {
+      text: null
+    },
+    tooltip: {
+      enabled: false
+    },
+    plotOptions: {
+      pie: {
+        innerSize: '75%',
+        states: {
+          hover: {
+            halo: {
+              size: 0
+            }
+          }
+        }
+      }
+    },
+    legend: {
+      enabled: false
+    },
+    series: [{
+      type: 'pie',
+      name: 'Game progress',
+      animation: {
+        duration: 600,
+        enabled: true
+      },
+      data: new_data,
+      dataLabels: {
+        enabled: false
+      }
+    }],
+    credits: {
+      enabled: false
+    }
+  });
+}
+
+function game_levels(chart_id, data, circleWidth) {
+  Highcharts.setOptions({
+    colors: ['transparent']
+  });
+
+  var new_data = [];
+
+  for (var i = 0; i < data.length; i++) {
+    new_data.push({name: data[i].name, y: data[i].y});
+  }
+
+  new Highcharts.Chart({
+    chart: {
+      renderTo: chart_id,
+      backgroundColor: 'transparent',
+      width: circleWidth,
+      height: 81,
+      margin: [-5,0,-10,0]
+    },
+    title: {
+      text: null
+    },
+    tooltip: {
+      useHtml: true,
+      style: {
+        padding: '3px',
+        fontSize: '11px',
+        width: (circleWidth - 5) + 'px'
+      },
+      formatter: function() {
+        return this.point.name;
+      }
+    },
+    plotOptions: {
+      pie: {
+        innerSize: '75%',
+        states: {
+          hover: {
+            halo: {
+              size: 0
+            }
+          }
+        }
+      }
+    },
+    legend: {
+      enabled: false
+    },
+    series: [{
+      type: 'pie',
+      name: 'Game levels',
+      animation: {
+        duration: 600,
+        enabled: true
+      },
+      data: new_data,
+      dataLabels: {
+        enabled: false
+      }
+    }],
+    credits: {
+      enabled: false
+    }
+  });
+}
+
+function student_progress(chart_id, new_data) {
+  if (!createdStudentProgressAriaTable) {
+    Highcharts.Chart.prototype.callbacks.push(function(chart) {
+      var div = document.createElement('div'), ariaTable;
+      $(chart.container).parent().parent().after(div);
+      div.innerHTML = chart.getTable();
+      ariaTable = div.getElementsByTagName('table')[0];
+      chart.renderTo.setAttribute('aria-label', 'Student progress pie chart.');
+      chart.renderTo.setAttribute('role', 'img');
+      chart.container.setAttribute('aria-hidden', true);
+      div.setAttribute('aria-label', 'A tabular view of the data in the chart.');
+      div.style.position = 'absolute';
+      div.style.left = '-9999em';
+      div.style.width = '1px';
+      div.style.height = '1px';
+      div.style.overflow = 'hidden';
+      div.className = 'ariaTable';
+    });
+    createdStudentProgressAriaTable = true;
+  }
+
+  if ($('#' + chart_id).length === 0) return;
+  new Highcharts.Chart({
+    chart: {
+      renderTo: chart_id,
+      backgroundColor: 'transparent',
+      plotBorderWidth: null,
+      plotShadow: false,
+      width: ($('body').hasClass('section_nav_page') ? 48 : 42),
+      height: ($('body').hasClass('section_nav_page') ? 48 : 42),
+      margin: [-10,0,-10,0]
+    },
+    title: {
+      text: null
+    },
+    tooltip: {
+      enabled: false
+    },
+    plotOptions: {
+      pie: {
+        allowPointSelect: false,
+        innerSize: '35%',
+        borderColor: 'rgba(0, 0, 0, .2)',
+        states: {
+          inactive: {
+            opacity: .8
+          },
+          hover: {
+            enabled:false
+          }
+        }
+      },
+      series: {
+        stacking: 'percent',
+        animation: false
+      }
+    },
+    legend: {
+      enabled: false
+    },
+    series: [{
+      type: 'pie',
+      name: 'Progress',
+      data: new_data,
+      dataLabels: {enabled: false}
+    }],
+    credits: {
+      enabled: false
+    }
+  });
+}
+
+function right_column_student_progress(chart_id, data, diameter, inner_diameter) {
+  /* inner_diameter not used */
+  if (!createdStudentProgressAriaTable) {
+    Highcharts.Chart.prototype.callbacks.push(function(chart) {
+      var div = document.createElement('div'), ariaTable;
+      chart.container.parentNode.appendChild(div);
+      div.innerHTML = chart.getTable();
+      ariaTable = div.getElementsByTagName('table')[0];
+      chart.renderTo.setAttribute('aria-label', 'Progress pie chart.');
+      chart.container.setAttribute('aria-hidden', true);
+      div.setAttribute('aria-label', 'A tabular view of the data in the chart.');
+      div.style.position = 'absolute';
+      div.style.left = '-9999em';
+      div.style.width = '1px';
+      div.style.height = '1px';
+      div.style.overflow = 'hidden';
+      div.className = 'ariaTable';
+    });
+    createdStudentProgressAriaTable = true
+  }
+
+  // margin -9 makes svg fill the whole space - 10 cuts off
+  new Highcharts.Chart({
+    chart: {
+      renderTo: chart_id,
+      backgroundColor: 'transparent',
+      plotBorderWidth: null,
+      width: diameter,
+      height: diameter,
+      margin: -9
+    },
+    title: {
+      text: null
+    },
+    tooltip: {
+      enabled: false
+    },
+    plotOptions: {
+      pie: {
+        allowPointSelect: false,
+        innerSize: '78%',
+        borderColor: 'rgba(0, 0, 0, .2)',
+        states: {
+          inactive: {
+            opacity: 1
+          },
+          hover: {
+            enabled:false
+          }
+        }
+      },
+      series: {
+        stacking: 'percent',
+        animation: false
+      }
+    },
+    legend: {
+      enabled: false
+    },
+    series: [{
+      type: 'pie',
+      name: 'Progress',
+      data: data,
+      dataLabels: {enabled: false},
+      animation: {
+        duration: 600,
+        enabled: true
+      },
+      states: {
+        hover: {
+          enabled: false
+        }
+      }
+    }],
+    credits: {
+      enabled: false
+    }
+  });
+}
+
+// mastery chart
+
+function mastery_chart(chart_id, data) {
+  var host = document.getElementById(chart_id);
+  if (!host) return;
+  var mount = getHighchartsShadowMount(host);
+  if (!mount) return;
+
+  new Highcharts.Chart({
+    chart: {
+      renderTo: mount,
+      backgroundColor: 'transparent',
+      plotBorderWidth: null,
+      plotShadow: false,
+      width: 42,
+      height: 42,
+      margin: [-10,0,-10,0]
+    },
+    title: {
+      text: null
+    },
+    tooltip: {
+      enabled: false
+    },
+    plotOptions: {
+      pie: {
+        allowPointSelect: false,
+        innerSize: '35%',
+        borderColor: 'rgba(0, 0, 0, .2)',
+        states: {
+          inactive: {
+            opacity: .8
+          },
+          hover: {
+            enabled:false
+          }
+        }
+      },
+      series: {
+        stacking: 'percent',
+        animation: false
+      }
+    },
+    legend: {
+      enabled: false
+    },
+    series: [{
+      type: 'pie',
+      name: 'Progress',
+      data: data,
+      dataLabels: {enabled: false}
+    }],
+    credits: {
+      enabled: false
+    }
+  });
+}
+
+function right_column_mastery_donut(chart_id, data, diameter, inner_diameter, margin) {
+  if (!createdStudentProgressAriaTable) {
+    Highcharts.Chart.prototype.callbacks.push(function(chart) {
+      var div = document.createElement('div'), ariaTable;
+      chart.container.parentNode.appendChild(div);
+      div.innerHTML = chart.getTable();
+      ariaTable = div.getElementsByTagName('table')[0];
+      chart.renderTo.setAttribute('aria-label', 'Mastery pie chart.');
+      chart.container.setAttribute('aria-hidden', true);
+      div.setAttribute('aria-label', 'A tabular view of the data in the chart.');
+      div.style.position = 'absolute';
+      div.style.left = '-9999em';
+      div.style.width = '1px';
+      div.style.height = '1px';
+      div.style.overflow = 'hidden';
+      div.className = 'ariaTable';
+    });
+    createdStudentProgressAriaTable = true;
+  }
+
+  // margin -9 makes svg fill the whole space - 10 cuts off
+  new Highcharts.Chart({
+    chart: {
+      renderTo: chart_id,
+      backgroundColor: 'transparent',
+      plotBorderWidth: null,
+      plotShadow: false,
+      width: diameter,
+      height: diameter,
+      margin: margin
+    },
+    title: {
+      text: null
+    },
+    tooltip: {
+      enabled: false
+    },
+    plotOptions: {
+      pie: {
+        allowPointSelect: false,
+        innerSize: '78%',
+        borderColor: 'rgba(0, 0, 0, .2)',
+        states: {
+          inactive: {
+            opacity: 1
+          },
+          hover: {
+            enabled:false
+          }
+        }
+      },
+      series: {
+        stacking: 'percent',
+        animation: false
+      }
+    },
+    legend: {
+      enabled: false
+    },
+    series: [{
+      type: 'pie',
+      name: 'Mastery',
+      data: data,
+      dataLabels: {enabled: false},
+      animation: {
+        duration: 600,
+        enabled: true
+      }
+    }],
+    credits: {
+      enabled: false
+    }
+  });
+}
+
+function dashboard_column_chart(marginBottom, chart_id, xAxisValues, maxVal, yAxisName, yAxisValues, chart_type) {
+  Highcharts.Chart.prototype.callbacks.push(function(chart) {
+    /* Accessibility */
+    chart.renderer.boxWrapper.attr({role: 'img'});
+  });
+  new Highcharts.setOptions({
+    colors: ['#8fd385']
+  });
+  new Highcharts.Chart({
+    chart: {
+      height: 150,
+      renderTo: chart_id,
+      type: (chart_type ? chart_type : 'spline'),
+      marginBottom: marginBottom,
+      style: {
+        fontFamily: '"RobotoLightNew", "Ubuntu", helvetica, sans-serif'
+      }
+    },
+    title: {
+      text: null
+    },
+    xAxis: {
+      categories: xAxisValues,
+      tickWidth: 1,
+      labels: {
+        autoRotationLimit: 0,
+        style: {
+          color: "#777", fontSize: '10px'
+        }
+      }
+    },
+    yAxis: {
+      max: maxVal,
+      allowDecimals: false,
+      tickAmount: 3,
+      title: {
+        text: yAxisName
+      }
+    },
+    plotOptions: {
+      column: {
+        stacking: 'normal'
+      }
+    },
+    tooltip: {
+      formatter: function() {
+        return this.y;
+      }
+    },
+    legend: {
+      enabled: false
+    },
+    series: [{
+      name: yAxisName,
+      data: yAxisValues,
+      marker: {
+        radius: 3
+      },
+      fillColor: {
+        linearGradient: [0, 0, 0, 150],
+        stops: [
+          [0, Highcharts.getOptions().colors[0]],
+          [1, Highcharts.Color(Highcharts.getOptions().colors[0]).setOpacity(0).get('rgba')]
+        ]
+      },
+      borderRadiusTopLeft: '3px',
+      borderRadiusTopRight: '3px'
+    }],
+    credits: {
+      enabled: false
+    }
+  });
+}
+
+function dashboard_double_chart(marginBottom, chart_id, xAxisValues, colName, colValues, splineName, splineValues) {
+  new Highcharts.setOptions({
+    colors: ['#8fd385','#868686']
+  });
+  new Highcharts.Chart({
+    chart: {
+      height: 150,
+      renderTo: chart_id,
+      zoomType: 'xy',
+      marginBottom: marginBottom,
+      style: {
+        fontFamily: '"RobotoLightNew", "Ubuntu", helvetica, sans-serif'
+      }
+    },
+    title: {
+      text: null
+    },
+    xAxis: [{
+      categories: xAxisValues,
+      crosshair: true,
+      tickWidth: 1,
+      labels: {
+        autoRotationLimit: 0,
+        style: {
+          color: "#777", fontSize: '10px'
+        }
+      }
+    }],
+    yAxis: [{ // Primary yAxis
+      labels: {
+        format: '{value}'
+      },
+      title: {
+        text: colName,
+        style: {
+          color: '#78ba6c'
+        }
+      },
+      allowDecimals: false
+    }, { // Secondary yAxis
+      labels: {
+        format: '{value}'
+      },
+      title: {
+        text: splineName
+      },
+      allowDecimals: false,
+      opposite: true
+    }],
+    tooltip: {
+      shared: true
+    },
+    legend: {
+      enabled: false
+    },
+    series: [{
+      name: colName,
+      data: colValues,
+      type: 'spline',
+      marker: {
+        radius: 3
+      },
+      fillColor: {
+        linearGradient: [0, 0, 0, 150],
+        stops: [
+          [0, Highcharts.getOptions().colors[0]],
+          [1, Highcharts.Color(Highcharts.getOptions().colors[0]).setOpacity(0).get('rgba')]
+        ]
+      }
+    }, {
+      name: splineName,
+      type: 'spline',
+      yAxis: 1,
+      data: splineValues,
+    }],
+    credits: {
+      enabled: false
+    }
+  });
+}
+
+function dashboard_double_error_chart(marginBottom, chart_id, xAxisValues, colName, colValues, splineName, splineValues) {
+  new Highcharts.setOptions({
+    colors: ['#8fd385','#ca6760']
+  });
+  new Highcharts.Chart({
+    chart: {
+      height: 150,
+      renderTo: chart_id,
+      zoomType: 'xy',
+      marginBottom: marginBottom,
+      style: {
+        fontFamily: '"RobotoLightNew", "Ubuntu", helvetica, sans-serif'
+      }
+    },
+    title: {
+      text: null
+    },
+    xAxis: [{
+      categories: xAxisValues,
+      crosshair: true,
+      tickWidth: 1,
+      labels: {
+        autoRotationLimit: 0,
+        style: {
+          color: "#777", fontSize: '10px'
+        }
+      }
+    }],
+    yAxis: [{ // Primary yAxis
+      labels: {
+        format: '{value}'
+      },
+      title: {
+        text: colName,
+        style: {
+          color: '#78ba6c'
+        }
+      },
+      allowDecimals: false
+    }, { // Secondary yAxis
+      labels: {
+        format: '{value}'
+      },
+      title: {
+        text: splineName,
+        style: {
+          color: Highcharts.getOptions().colors[1]
+        }
+      },
+      allowDecimals: false,
+      opposite: true
+    }],
+    tooltip: {
+      shared: true
+    },
+    legend: {
+      enabled: false
+    },
+    series: [{
+      name: colName,
+      data: colValues,
+      type: 'spline',
+      marker: {
+        radius: 3
+      },
+      fillColor: {
+        linearGradient: [0, 0, 0, 150],
+        stops: [
+          [0, Highcharts.getOptions().colors[0]],
+          [1, Highcharts.Color(Highcharts.getOptions().colors[0]).setOpacity(0).get('rgba')]
+        ]
+      }
+    }, {
+      name: splineName,
+      type: 'spline',
+      yAxis: 1,
+      data: splineValues,
+    }],
+    credits: {
+      enabled: false
+    }
+  });
+}
+
+function dashboard_pie_chart(chart_id, pie_name, pie_data) {
+  new Highcharts.setOptions({colors: ['#8fd385','#7dbe73','#5cbfab','#79d7c4']});
+  new Highcharts.Chart({
+    chart: {
+      type: 'pie',
+      renderTo: chart_id,
+      height: 130,
+      margin: [0,0,0,0],
+      style: {
+        fontFamily: '"RobotoLightNew", "Ubuntu", helvetica, sans-serif'
+      }
+    },
+    title: {
+      text: null
+    },
+    plotOptions: {
+      pie: {
+        borderColor: 'rgba(0, 0, 0, .2)',
+        states: {
+          hover: {
+            halo: {size: 0}
+          }
+        },
+        dataLabels: {
+          enabled: true,
+          distance: 10,
+          useHTML: true,
+          style: {
+            fontWeight: 'normal', color: '#777'
+          }
+        }
+      }
+    },
+    series: [{
+      name: pie_name,
+      data: pie_data,
+      dataLabels: {enabled: true}
+    }],
+    credits: {
+      enabled: false
+    }
+  });
+}
+
+function dashboard_boxplot_chart(marginBottom, chart_id, xAxisValues, yAxisName, yAxisValues, timeSpan) {
+  new Highcharts.setOptions({
+    colors: ['#8fd385']
+  });
+
+  new Highcharts.Chart({
+    chart: {
+      height: 150,
+      renderTo: chart_id,
+      type: 'boxplot',
+      marginBottom: marginBottom,
+      style: {
+        fontFamily: '"RobotoLightNew", "Ubuntu", helvetica, sans-serif'
+      }
+    },
+    title: {
+      text: ''
+    },
+    xAxis: {
+      categories: xAxisValues,
+      tickWidth: 1,
+      labels: {
+        autoRotationLimit: 0,
+        style: {
+          fontSize: '10px'
+        }
+      }
+    },
+    yAxis: {
+      min: 0,
+      max: 100,
+      tickAmount: 3,
+      title: {
+        text: yAxisName
+      }
+    },
+    plotOptions: {
+      boxplot: {
+        fillColor: '#effded'
+      }
+    },
+    series: [{
+      data: yAxisValues,
+      tooltip: {
+        headerFormat: '',
+        pointFormat: 'Max: {point.high}<br>Med: {point.median}<br>Min: {point.low}'
+      }
+    }],
+    legend: {
+      enabled: false
+    },
+    credits: {
+      enabled: false
+    }
+  });
+}
+
+function dashboard_widget_chart(marginBottom, chart_id, xAxisValues, maxVal, yAxisName, yAxisValues, chart_type) {
+  if (chart_type == 'pie') {
+    var pie_data = [];
+
+    $.each(xAxisValues, function(i, v) {
+      var formatted_v;
+
+      if (v.length > 11) {
+        // week view
+        formatted_v = v.replace("<br>", " - ");
+      } else {
+        formatted_v = v.replace("<br>", " ");
+      }
+
+      pie_data.push({name: formatted_v, y: yAxisValues[i]});
+    });
+
+    $('#' + chart_id).parent().addClass("center_info");
+
+    dashboard_pie_chart(chart_id, yAxisName, pie_data);
+  } else {
+    dashboard_column_chart(marginBottom, chart_id, xAxisValues, maxVal, yAxisName, yAxisValues, chart_type);
+  }
+}

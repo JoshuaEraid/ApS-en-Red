@@ -1,0 +1,74 @@
+(function( $ ) {
+  $.fn.setRatingManual = function(options) {
+    var obj = this;
+    var settings = $.extend({
+      max : 5,
+      half : true,
+      fieldName : 'rating',
+      fieldId : 'rating'
+    }, options );
+    this.settings = settings;
+
+    // add click on stars
+    for(var i = 1 ; i <= settings.max ; i++) {
+      var star = $(this).find('input').eq(i).data('rating', i).click(
+        function(){
+          $('#'+obj.settings.fieldId).val($(this).data('rating'));
+        }
+      ) 
+    }    
+    $(this).append('<input type="hidden" name="'+settings.fieldName+'" id="'+settings.fieldId+'" />');
+
+    // Check initial rating star
+    $(this).find('input:checked').prop('checked', false);
+    $(this).find('input#star' + $(this).data().rating).prop('checked', true);
+  }
+
+  $.fn.addRatingStatic = function(numRating) {
+    var obj = this;
+    var settings = $.extend({
+      max : 5,
+      half : true,
+      icon : 'starOutline',
+      icon_half : 'starHalf'
+    });
+    this.settings = settings;
+
+    // create the stars
+    for(var i = 1 ; i <= settings.max ; i++) {
+      var star = $('<i/>').addClass(this.settings.icon).addClass('icnColor').data('rating', i).appendTo(this);
+    }
+    this.showRating(numRating,true);
+  };
+
+  $.fn.setRating = function(numRating) {
+    var obj = this;
+    $('#'+obj.settings.fieldId).val(numRating);
+    obj.showRating(numRating, true);
+  };
+
+  $.fn.showRating = function(numRating, force) {
+    var obj = this;
+    if($('#'+obj.settings.fieldId).val() == '' || force)
+    {
+      var half = false;
+      if(numRating % 1 !== 0 ){
+        numRating = Math.floor(numRating) + 1;
+        half = true;
+      }
+      $(obj).find('i').each(function(){
+        var icon = obj.settings.icon;
+        if($(this).data('rating') <= numRating) {
+          if(half && (numRating == $(this).data('rating'))){
+            $(this).addClass(obj.settings.icon_half).removeClass(obj.settings.icon);
+            icon = obj.settings.icon_half;
+          }else{
+            icon = obj.settings.icon;
+            $(this).addClass('star').removeClass(obj.settings.icon);
+          }
+        }
+      });
+    }
+  };
+
+}( jQuery ));

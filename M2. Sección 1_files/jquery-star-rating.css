@@ -1,0 +1,39 @@
+.ratingStatic i {margin-right: -3px}
+
+.m-l-10 {margin-left: 10px !important}
+.m-l-15 {margin-left: 15px !important}
+.m-l-20 {margin-left: 20px !important}
+.m-r-10 {margin-right: 10px !important}
+.m-r-15 {margin-right: 15px !important}
+.m-r-20 {margin-right: 20px !important}
+.m-t-10 {margin-top: 10px !important}
+.m-t-15 {margin-top: 15px !important}
+.m-t-20 {margin-top: 20px !important}
+
+.review .primaryColorText {max-width: 400px; display: flex}
+.review .primaryColorText a {flex: 1}
+.review .primaryColorText .publish_student_review {display: flex; max-width: 50%}
+
+/* Accessible rating stars */
+#star_rating {display: inline-block; padding: 0 3px}
+#star_rating input[type="radio"] {width: 13px; height: 13px; margin: 0}
+#star_rating input[type="radio"] + label:before,
+#star_rating input:first-of-type + label,
+#star_rating input:first-of-type:checked + label {display: none}
+
+#star_rating label i {margin-right: -4px}
+#star_rating label {display: inline-block; cursor: pointer; margin: 0 0 0 -3px}
+#star_rating input:checked ~ label i:after {top: -4820px} /* .starOutline */
+#star_rating input:checked + label i:after,
+#star_rating:hover input + label i:after,
+#star_rating:hover input:checked ~ label i:after {top: -2640px} /* .star */
+#star_rating input:hover ~ label i:after,
+#star_rating input:focus ~ label i:after,
+#star_rating input:first-of-type + label i:after {top: -4820px} /* .starOutline */
+#star_rating input:hover + label + input ~ label i:after {top: -4820px !important}
+#star_rating input:hover + label i:after,
+#star_rating input:focus + label i:after {top: -2640px} /* .star */
+
+@media screen and (max-width: 979px) {
+  #facebox .facebox-content #star_rating label {display: inline-block !important; width: auto !important}
+}

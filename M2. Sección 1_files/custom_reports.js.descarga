@@ -1,0 +1,1127 @@
+var charts_run_mode = charts_run_mode || false;
+var chart_widget_mode = chart_widget_mode || false;
+var chart_widget_mode_height = 185;
+var chart_widget_mode_margin_top = 15;
+
+function show_related_columns(link, report_id, name, klass, table_name, is_collection, related_to){
+    if($(link).attr('aria-expanded') == 'true'){
+        $(link).attr('aria-expanded', 'false');
+        $(link).find('i').attr('class', 'arrowRight');
+        $(link).parent().next().hide();
+    }else{
+        if($(link).parent().next().find('input').length == 0){
+            $.get('/custom_report_columns/get/' + report_id + '?name=' + name + '&klass=' + klass + '&table_name=' + table_name + '&is_collection=' + is_collection + '&related_to=' + related_to, function(data){
+                $(link).parent().next().html(data).show();
+            });
+        }else{
+            $(link).parent().next().show();
+        }
+        $(link).attr('aria-expanded', 'true');
+        $(link).find('i').attr('class', 'arrowDown');
+    }
+}
+
+function custom_report_filter_for( column )
+{
+    var common_fields = '<input type="hidden" name="type" value="' + $(column).data('type') + '" />' +
+        '<input type="hidden" name="sql_type" value="' + $(column).data('sql_type') + '" />' +
+        '<input type="hidden" name="extra_conditions" value="' + ($(column).data('extra_conditions') || '') + '" />';
+    switch($(column).data('type')){
+        case 'boolean':
+            var sql_type = $(column).data('sql_type');
+            return common_fields + '<select class="custom-report-filter-select-value" name="value" id="filter_value">' +
+                '<option value="' + ( sql_type == 'boolean' ? 'true' : '1' ) + '">' + yes_text + '</option>' +
+                '<option value="' + ( sql_type == 'boolean' ? 'false' : '0' ) + '">' + no_text + '</option>' +
+                '</select>';
+            break;
+
+        case 'float':
+        case 'integer':
+            return common_fields + '<select class="custom-report-filter-operator" name="op">' +
+                '<option value="<">' + less_than_text + '</option>' +
+                '<option value=">">' + greater_than_text + ' </option>' +
+                '<option value="=">' + equals_text + '</option>' +
+                '<option value="in">' + in_text + '</option>' +
+                '</select>' +
+                '<input type="text" class="custom-report-filter-text-value" name="value" id="filter_value">';
+            break;
+
+        case 'datetime':
+        case 'date':
+            return common_fields + '<select class="custom-report-filter-operator" name="op">' +
+                '<option value="has value">' + has_value_text + '</option>' +
+                '<option value="has no value">' +  has_no_value_text + '</option>' +
+                '<option value="on or later than">' +  on_or_later_than_text + '</option>' +
+                '<option value="on or earlier than">' +  on_or_earlier_than_text + '</option>' +
+                '<option value="date range">' + date_range_text + '</option>' +
+                '</select>' +
+                '<input type="text" style="display: none" class="custom-report-filter-date" name="from_value" id="filter_from_value">' +
+                '<input type="hidden" class="custom-report-filter-year-value" name="from_year">' +
+                '<input type="hidden" class="custom-report-filter-month-value" name="from_month">' +
+                '<input type="hidden" class="custom-report-filter-day-value" name="from_day">' +
+                '<span style="display: none" class="hyphen date_filter_hyphen"> - </span>' +
+                '<input style="display: none" type="text" class="custom-report-filter-date" name="to_value" id="filter_to_value">' +
+                '<input type="hidden" class="custom-report-filter-year-value" name="to_year">' +
+                '<input type="hidden" class="custom-report-filter-month-value" name="to_month">' +
+                '<input type="hidden" class="custom-report-filter-day-value" name="to_day">';
+            break;
+
+        case 'tags':
+            return common_fields + '<select disabled="disabled">' +
+                    '<option value="in">' + in_text + '</option>' +
+                    '</select>' +
+                    '<input type="text" class="custom-report-filter-text-value" autocomplete="off" name="value" placeholder="Tags" id="tags_selector" class="tags-select2">';
+
+        default:
+            if(/enum\(/.test($(column).data('sql_type'))){
+                return common_fields + '<select class="custom-report-filter-select-value" name="value" id="filter_value">' +
+                    options_for_enum($(column).data('sql_type')) +
+                    '</select>';
+            }else{
+                return common_fields + '<select class="custom-report-filter-operator" name="op">' +
+                    '<option value="=">=</option>' +
+                    '<option value="contains">' + contains_text +'</option>' +
+                    '<option value="starts with">' + starts_with_text + '</option>' +
+                    '<option value="ends with">' + ends_with_text + '</option>' +
+                    '</select>' +
+                    '<input type="text" class="custom-report-filter-text-value" name="value" id="filter_value">';
+            }
+            break;
+    }
+}
+
+function options_for_enum( sql_type )
+{
+    //var enum_values = sql_type.replace(/enum\(|'|\)/g, '').split(',');
+    var enum_values = eval( '[' + sql_type.substring( 5, sql_type.length -1 ) + ']' )
+    var content = '';
+    for(var i = 0; i < enum_values.length; i++){
+        content += '<option value="' + enum_values[i] + '">' + enum_values[i] + '</option>';
+    }
+    return content;
+}
+
+function get_option_text(select){
+    return select.find('option[value="' + select.val() + '"]').text();
+}
+
+function get_optgroup_text(select){
+    return select.find('option[value="' + select.val() + '"]').parent().attr('label');
+}
+
+function show_filter_error(message){
+    $.alert({
+        title: 'Error', //TODO: localize this text
+        content: message,
+        confirm: function(){
+            $('.custom-report-filter-date, .custom-report-filter-text-value').focus();
+        }
+    });
+}
+
+function add_sort()
+{
+    $('#sort_label').val(get_option_text($('#sort_column')));
+    $('#add_sort_form').submit();
+}
+
+function add_grouping()
+{
+    $('#grouping_label').val(get_option_text($('#grouping_column')));
+    $('#add_grouping_form').submit();
+}
+
+function show_general_error(message){
+    $.alert({
+        title: 'Error', //TODO: localize this text
+        content: message
+    });
+}
+
+function add_datepicker(from_input, to_input, has_time)
+{
+    var options = {
+        dateFormat: 'M dd yy', /* TODO add localized format */
+        monthNames: ['January','February','March','April','May','June','July','August','September','October','November','December'], /* TODO add localized names */
+        monthNamesShort: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'], /* TODO add localized names */
+        timeFormat: 'hh:mm TT', /* TODO add localized format */
+    };
+
+    var from = from_input
+            .datepicker(options)
+            .on( "change", function() {
+                to.datepicker( "option", "minDate", getDate( this ) );
+            }),
+        to = to_input.datepicker(options)
+            .on( "change", function() {
+                from.datepicker( "option", "maxDate", getDate( this ) );
+            });
+
+    function getDate( element ) {
+        var date,
+            $picker_input = $(element);
+        try {
+            date = new Date(Date.parse($picker_input.val()));
+            if (date == null) {
+                $picker_input.nextAll().eq(0).val('');
+                $picker_input.nextAll().eq(1).val('');
+                $picker_input.nextAll().eq(2).val('');
+                if(has_time){
+                    $picker_input.nextAll().eq(3).val('');
+                    $picker_input.nextAll().eq(4).val('');
+                }
+            } else {
+                $picker_input.nextAll().eq(0).val(date.getFullYear());
+                $picker_input.nextAll().eq(1).val(date.getMonth() + 1);
+                $picker_input.nextAll().eq(2).val(date.getDate());
+                if(has_time){
+                    $picker_input.nextAll().eq(3).val(date.getHours());
+                    $picker_input.nextAll().eq(4).val(date.getMinutes());
+                }
+                for(var i = 0; i < 5; i++){
+                    if(typeof $picker_input.nextAll().eq(i) != 'undefined' && $picker_input.nextAll().eq(i).val() == 'NaN'){
+                        $picker_input.nextAll().eq(i).val('');
+                    }
+                }
+            }
+        } catch( error ) {
+            date = null;
+        }
+
+        return date;
+    }
+}
+
+function init_sortable_filters()
+{
+    $(".custom_report_tab_filters .draggable-columns").sortable({
+        revert: 300,
+        containment: 'parent',
+        tolerance: 'pointer',
+        handle: '.draggable_handle',
+        update: function(){
+            $('#filters').attr('action', '/custom_report_filters/save_order/' + custom_report_id).ajaxSubmit();
+        }
+    });
+}
+
+function init_sortable_sort()
+{
+    $(".custom_report_tab_sort .draggable-columns").sortable({
+        revert: 300,
+        containment: 'parent',
+        tolerance: 'pointer',
+        handle: '.draggable_handle',
+        update: function(){
+            $('#sort').attr('action', '/custom_report_sorting/save_order/' + custom_report_id).ajaxSubmit();
+        }
+    });
+}
+
+function init_sortable_organize()
+{
+    $(".custom_report_tab_organize .draggable-columns").sortable({
+        revert: 300,
+        containment: 'parent',
+        tolerance: 'pointer',
+        handle: '.draggable_handle',
+        update: function(){
+            $('#save_organize_form').ajaxSubmit();
+        }
+    });
+}
+
+function refresh_charts()
+{
+    var charts = custom_charts_design.calc_charts();
+    $( '#custom_report_tab_charts .sample_chart' ).addClass( 'obsolute' );
+
+    if( charts.length ) {
+        var chart, chart_id, div;
+        var template = $('#sample_chart_template').text();
+
+        for (var i = 0; i < charts.length; i++){
+            if (( div = $('#' + ( chart_id = 'custom_charts_' + ( chart = charts[i] ).id )) ).length == 0) {
+                div = $(template).appendTo($('#custom_report_tab_charts'))
+                    .data('table_name', chart.table_name)
+                    .data('rel_name', typeof chart.related != 'undefined' ? chart.related : chart.table_name)
+                    .data('generator', chart.generator)
+                    .data('labels', chart.labels)
+                    .data('column_name', chart.column_name)
+                    .data('chart_data', chart.data)
+                    .data('y_axis_label', chart.y_axis_label);
+                div.find('.chart_title').val(chart.title);
+                div.attr('id', chart_id).data('chart', chart);
+                div.find('div .chart_selector ')
+                    .change(function () {
+                        $(this).closest('.sample_chart').toggleClass('selected');
+                    })
+                    .attr('id', chart_id + '_selected')
+                    .next().attr('for', chart_id + '_selected');
+
+                var is_3axis = typeof chart.related != 'undefined';
+
+                if(is_3axis){
+                    div.find('div .chart_transpose ')
+                        .attr('id', chart_id + '_transpose')
+                        .next().attr('for', chart_id + '_transpose');
+                    div.find('select option[value="pie"]').remove();
+                }else{
+                    div.find('.sample_chart_bottom .floatR').hide();
+                }
+
+                custom_charts.draw_chart(div.find('> div.data-highcharts-chart').get(0), chart.type, '', chart.y_axis_label, chart.labels, chart.data);
+            }
+            else
+                div.removeClass('obsolute')
+        }
+
+        if(typeof custom_reports.configuration.charts != 'undefined'){
+            for (i in custom_reports.configuration.charts) {
+                var chart = custom_reports.configuration.charts[i];
+                console.log('chart ' + i, chart);
+
+                $('#' + chart.id + ' .chart_title').val(chart.title);
+                $('#' + chart.id + ' .chart_type').val(chart.type);
+                $('#' + chart.id + ' .chart_transpose').prop('checked', chart.transpose == 'true');
+                $('#' + chart.id + ' .chart_selector').prop('checked', true);
+            }
+        }
+    }
+    else
+        $('#charts_intro').show();
+
+    $( '#custom_report_tab_charts .sample_chart.obsolute' ).remove();
+}
+
+function save_charts()
+{
+    var charts = [];
+    $('#custom_report_tab_charts .chart_selector:checked').each(function(){
+        var $chart = $(this).closest('.sample_chart');
+        charts.push({
+            table_name: $chart.data('table_name'),
+            rel_name: $chart.data('rel_name'),
+            id: $chart.attr('id'),
+            generator: $chart.data('generator'),
+            labels: $chart.data('labels'),
+            y_axis_label: $chart.data('y_axis_label'),
+            column_name: $chart.data('column_name'),
+            title: $chart.find('.chart_title').val(),
+            type: $chart.find('.chart_type').val(),
+            transpose: $chart.find('.chart_transpose').is(':checked')
+        });
+    });
+
+    $.post('/custom_report_charts/save/' + custom_report_id, {charts: charts});
+}
+
+function filter_column_changed(column_select){
+    var selected_option = column_select.find(':selected');
+    $('.custom-report-filter-label').hide();
+    $('.custom-report-filter-user-prompt').prop('checked', false);
+    column_select.nextAll('span, select, input[type="hidden"], input[type="text"]:not(.custom-report-filter-label), .select2-container').remove();
+    column_select.after(custom_report_filter_for(selected_option));
+    if (selected_option.data('type') == 'date' || selected_option.data('type') == 'datetime') {
+        add_datepicker($('#filter_from_value'), $('#filter_to_value'));
+        $('.custom-report-filter-user-prompt').prop('disabled', true);
+    }
+    if(selected_option.data('type') == 'tags'){
+        init_filterable_select('tags_selector', [], '/suggest_tags/list');
+        $('.custom-report-filter-user-prompt').prop('disabled', true);
+    }
+    $('.custom-report-filter-operator').change();
+}
+
+var custom_charts_design = {
+   Scenarios: [
+     function( charts, column, related, configuration ) {
+       if( /enum\(/.test( column.sql_type ) )
+       {
+         var values = column.sql_type.replace( /enum\(|'|\)/g, '' ).split( ',' );
+
+         var is_3axis = related && related.is_collection;
+
+         charts.push( is_3axis ? {
+           id: related.name + '_' + column.name + '1',
+           generator: 'related_enum_group',
+           type: 'column',
+           title: configuration.plural + ' by ' + column.label + '/' + related.label,
+           y_axis_label: related.label,
+           column_name: column.name,
+           related: related.name,
+           table_name: related.table_name,
+           labels: values,
+           data: custom_charts_design.gen_data( custom_charts_design.gen_categories( configuration.label, 5 ), values )
+         } : {
+           id: column.name + '1',
+           generator: 'enum_group',
+           type: 'pie',
+           title: configuration.plural + ' by ' + column.label,
+           y_axis_label: configuration.plural,
+           column_name: column.name,
+           table_name: configuration.table_name,
+           labels: [ configuration.plural ],
+           data: custom_charts_design.gen_data( values )
+         } )
+       }
+     },
+       function( charts, column, related, configuration ) {
+           if( column.supports_charts )
+           {
+               var values = column.possible_values;
+
+               var is_3axis = related && related.is_collection;
+
+               charts.push( is_3axis ? {
+                   id: related.name + '_' + column.name + '1',
+                   generator: 'related_enum_group',
+                   type: 'column',
+                   title: configuration.plural + ' by ' + column.label + '/' + related.label,
+                   y_axis_label: related.label,
+                   column_name: column.name,
+                   related: related.name,
+                   table_name: related.table_name,
+                   labels: values,
+                   data: custom_charts_design.gen_data( custom_charts_design.gen_categories( configuration.label, 5 ), values )
+               } : {
+                   id: column.name + '1',
+                   generator: 'enum_group',
+                   type: 'pie',
+                   title: configuration.plural + ' by ' + column.label,
+                   y_axis_label: configuration.plural,
+                   column_name: column.name,
+                   table_name: configuration.table_name,
+                   labels: [ configuration.plural ],
+                   data: custom_charts_design.gen_data( values )
+               } )
+           }
+       },
+       function( charts, column, related, configuration ) {
+           if(typeof configuration.grouping !== 'undefined' && configuration.grouping !== null && column.name != 'tags'){
+               for(var i = 0; i < configuration.grouping.length; i++){
+                   console.log('column', column, 'related', related, 'configuration.grouping[i]', configuration.grouping[i]);
+                   if(column.name == configuration.grouping[i].column_name &&
+                    ( ( related == null && configuration.table_name == configuration.grouping[i].rel_name ) ||
+                       ( related !== null && related.name == configuration.grouping[i].rel_name ) ) ){
+                        if(typeof configuration.grouping[i].granularity == 'undefined'){
+                            var values = [];
+                            for(let i = 1; i <= 5; i++){
+                                values.push(column.label + ' ' + i);
+                            }
+                        }else{
+                            var date = new Date();
+                            var current_year = date.getFullYear();
+                            var current_month = date.getMonth();
+                            switch(configuration.grouping[i].granularity){
+                                case 'year':
+                                    var values = [current_year - 3, current_year - 2, current_year - 1, current_year];
+                                    break;
+                                case 'quarter':
+                                    var values = ['Q1 ' + current_year, 'Q2 ' + current_year, 'Q3 ' + current_year, 'Q4 ' + current_year];
+                                    break;
+                                case 'month':
+                                    //TODO: localize month names
+                                    var month_names = ["January", "February", "March", "April"];
+                                    var values = [];
+                                    for(var i = 0; i < month_names.length; i++){
+                                        values.push(month_names[i] + ' ' + current_year);
+                                    }
+                                    break;
+                                case 'week':
+                                    var values = [];
+                                    for(var i = 21; i < 25; i++){
+                                        //TODO: localize "Week"
+                                        values.push('Week ' + i + ' ' + current_year);
+                                    }
+                                    break;
+                                case 'day':
+                                    var values = [];
+                                    for(var i = 0; i < 4; i++){
+                                        date = new Date();
+                                        date.setDate(date.getDate() - i);
+                                        values.push(date.getFullYear() + '-' + (date.getMonth() + 1) + '-' + date.getDate());
+                                    }
+                                    break;
+                                default:
+                                break;
+                            }
+                        }
+
+                       var is_3axis = related && related.is_collection;
+
+                       charts.push( is_3axis ? {
+                           id: related.name + '_' + column.name + '1',
+                           generator: 'related_enum_group',
+                           type: 'column',
+                           title: configuration.plural + ' by ' + column.label + '/' + related.label,
+                           y_axis_label: related.label,
+                           column_name: column.name,
+                           related: related.name,
+                           table_name: related.table_name,
+                           labels: values,
+                           data: custom_charts_design.gen_data( custom_charts_design.gen_categories( configuration.label, 5 ), values )
+                       } : {
+                           id: column.name + '1',
+                           generator: 'enum_group',
+                           type: 'pie',
+                           title: configuration.plural + ' by ' + column.label,
+                           y_axis_label: configuration.plural,
+                           column_name: column.name,
+                           table_name: configuration.table_name,
+                           labels: [ configuration.plural ],
+                           data: custom_charts_design.gen_data( values )
+                       } )
+                   }
+               }
+           }
+       },
+        function( charts, column, related, configuration ) {
+            if(column.func == 'count'){
+                charts.push({
+                    id: column.column_name + '1',
+                    generator: 'count_column',
+                    type: 'pie',
+                    title: configuration.plural + ' by ' + column.label,
+                    y_axis_label: column.label,
+                    column_name: column.column_name + '_count',
+                    table_name: configuration.table_name,
+                    labels: [ column.label ],
+                    data: custom_charts_design.gen_data(custom_charts_design.gen_categories(configuration.label, 5))
+                });
+            }
+        },
+        function( charts, column, related, configuration ) {
+            if(column.name == 'tags'){
+                let values = [];
+                for(let i = 1; i <= 5; i++){
+                    values.push(column.label + ' ' + i);
+                }
+
+                var is_3axis = related && related.is_collection;
+
+                charts.push( is_3axis ? {
+                    id: related.name + '_' + column.name + '1',
+                    generator: 'related_tags_column',
+                    type: 'column',
+                    title: configuration.plural + ' by ' + column.label + '/' + related.label,
+                    y_axis_label: related.label,
+                    column_name: column.name,
+                    related: related.name,
+                    table_name: related.table_name,
+                    labels: values,
+                    data: custom_charts_design.gen_data( custom_charts_design.gen_categories( configuration.label, 5 ), values )
+                } : {
+                    id: column.name + '1',
+                    generator: 'tags_column',
+                    type: 'pie',
+                    title: configuration.plural + ' by ' + column.label,
+                    y_axis_label: configuration.plural,
+                    column_name: column.name,
+                    table_name: configuration.table_name,
+                    labels: [ configuration.plural ],
+                    data: custom_charts_design.gen_data(custom_charts_design.gen_categories(column.label, 5))
+                });
+            }
+        }
+   ],
+
+   gen_categories: function( prefix, count )
+   {
+     var cats = [];
+
+     for( var i = 1; i <= count; i++ )
+       cats.push( prefix + ' ' + i );
+
+     return cats;
+   },
+
+   gen_data: function( x, y )
+   {
+     var data = [];
+
+     if( !y )
+       y = [ 0 ];
+
+     for( var i = 0 ; i < x.length; i++ )
+     {
+       var point = [ x[ i ] ];
+
+       for( var j = 0; j < y.length; j++ )
+         point.push( Math.round( Math.random() * 100 ) );
+
+       data.push( point );
+     }
+
+     return data;
+   },
+
+   run_scenarios: function(charts, columns, related, configuration)
+   {
+     for(var i = 0; i < columns.length; i++)
+       if(columns[i].include || columns[i].func == 'count')
+         for(var j = 0; j < this.Scenarios.length; j++)
+           this.Scenarios[j](charts, columns[i], related, configuration);
+   },
+
+   calc_charts: function()
+   {
+     var charts = [];
+     var configuration = custom_reports.configuration;
+
+     this.run_scenarios( charts, configuration.columns, null, configuration );
+     if(configuration.summary){
+       this.run_scenarios( charts, configuration.summary, null, configuration );
+     }
+
+     for( var j = 0; j < configuration.related.length; j++ )
+       if( configuration.related[ j ].columns )
+         this.run_scenarios( charts, configuration.related[ j ].columns, configuration.related[ j ], configuration );
+
+     return charts;
+   }
+ }
+
+ var custom_charts = {
+   DefaultTypes: {
+
+   },
+
+   OptionsByType: {
+     'column': {
+       chart: {
+         type: 'column',
+         marginTop: 30,
+         height: (charts_run_mode ? 500 : 250),
+         style: {
+           fontFamily: '"RobotoLightNew", "Ubuntu", helvetica, sans-serif'
+         }
+       },
+       xAxis: {
+         labels: {
+           style: {
+             fontSize: '12px'
+           }
+         }
+       },
+       yAxis: {
+         min: 0,
+         allowDecimals: false,
+         lineWidth: 1,
+         minorTickInterval: 'auto',
+         minorTickLength: 1
+       },
+       plotOptions: {
+         column: {
+           stacking: 'normal'
+         }
+       },
+       legend: !chart_widget_mode,
+       data_transformer: function( options, labels, data ) {
+         options.xAxis.categories = $.map( data, function( e ) { return e[ 0 ] } );
+         var series = options.series = [];
+
+         for( var i = 0; i < labels.length; i++ )
+           series.push( {
+             name: labels[ i ],
+             data: $.map( data, function( e ) { return e[ i + 1 ] } ),
+             borderRadiusTopLeft: '3px',
+             borderRadiusTopRight: '3px'
+           } );
+       }
+       },
+       'bar': {
+           chart: {
+               type: 'bar',
+               marginTop: 30,
+               marginRight: 30,
+               height: (charts_run_mode ? 500 : 250),
+               style: {
+                 fontFamily: '"RobotoLightNew", "Ubuntu", helvetica, sans-serif'
+               }
+           },
+           xAxis: {
+               labels: {
+                   style: {
+                       fontSize: '12px'
+                   }
+               }
+           },
+           yAxis: {
+               min: 0,
+               allowDecimals: false,
+               lineWidth: 1,
+               minorTickInterval: 'auto',
+               minorTickLength: 1,
+           },
+           plotOptions: {
+               column: {
+                   stacking: 'normal'
+               }
+           },
+           legend: !chart_widget_mode,
+           data_transformer: function( options, labels, data ) {
+               options.xAxis.categories = $.map( data, function( e ) { return e[ 0 ] } );
+               var series = options.series = [];
+
+               for( var i = 0; i < labels.length; i++ )
+                   series.push( {
+                       name: labels[ i ],
+                       data: $.map( data, function( e ) { return e[ i + 1 ] } ),
+                       borderRadiusTopLeft: '3px',
+                       borderRadiusTopRight: '3px'
+                   } );
+           }
+       },
+     'pie': {
+       chart: {
+         plotBackgroundColor: null,
+         plotBorderWidth: null,
+         plotShadow: false,
+         marginTop: 30,
+         marginBottom: 10,
+         height: (charts_run_mode ? 500 : 250),
+         style: {
+           fontFamily: '"RobotoLightNew", "Ubuntu", helvetica, sans-serif'
+         }
+       },
+       plotOptions: {
+         pie: {
+           allowPointSelect: true,
+           cursor: 'pointer',
+           dataLabels: {
+             color: '#777',
+             style: {
+               fontWeight: 'normal'
+             },
+             useHTML: true,
+             formatter: function() {
+             return this.point.name + ': ' + Math.round( this.percentage ) + '% (' + this.y + ')';
+             }
+           }
+         }
+       },
+       legend: !chart_widget_mode,
+       data_transformer: function( options, labels, data ) {
+         options.series = [ {
+           type: 'pie',
+           name: labels[ 0 ],
+           data: $.map( data, function( e ) { return { name: e[ 0 ], y: e[ 1 ] }; } )
+         } ];
+       }
+     },
+       'area': {
+           chart: {
+               type: 'area',
+               marginTop: 30,
+               height: (charts_run_mode ? 500 : 250),
+               style: {
+                 fontFamily: '"RobotoLightNew", "Ubuntu", helvetica, sans-serif'
+               }
+           },
+           xAxis: {
+               labels: {
+                   style: {
+                       fontSize: '12px'
+                   }
+               }
+           },
+           yAxis: {
+               min: 0,
+               allowDecimals: false,
+               lineWidth: 1,
+               minorTickInterval: 'auto',
+               minorTickLength: 1,
+           },
+           plotOptions: {
+               column: {
+                   stacking: 'normal'
+               }
+           },
+           legend: !chart_widget_mode,
+           data_transformer: function( options, labels, data ) {
+               options.xAxis.categories = $.map( data, function( e ) { return e[ 0 ] } );
+               var series = options.series = [];
+
+               for( var i = 0; i < labels.length; i++ )
+                   series.push( {
+                       name: labels[ i ],
+                       data: $.map( data, function( e ) { return e[ i + 1 ] } ),
+                       marker : {
+                           radius: 3
+                       }
+                   } );
+           }
+       },
+       'line': {
+           chart: {
+               type: 'line',
+               marginTop: 30,
+               height: (charts_run_mode ? 500 : 250),
+               style: {
+                 fontFamily: '"RobotoLightNew", "Ubuntu", helvetica, sans-serif'
+               }
+           },
+           xAxis: {
+               labels: {
+                   style: {
+                       fontSize: '12px'
+                   }
+               }
+           },
+           yAxis: {
+               min: 0,
+               allowDecimals: false,
+               lineWidth: 1,
+               minorTickInterval: 'auto',
+               minorTickLength: 1,
+           },
+           plotOptions: {
+               column: {
+                   stacking: 'normal'
+               }
+           },
+           legend: !chart_widget_mode,
+           data_transformer: function( options, labels, data ) {
+               options.xAxis.categories = $.map( data, function( e ) { return e[ 0 ] } );
+               var series = options.series = [];
+
+               for( var i = 0; i < labels.length; i++ )
+                   series.push( {
+                       name: labels[ i ],
+                       data: $.map( data, function( e ) { return e[ i + 1 ] } )
+                   } );
+           }
+       },
+       'scatter': {
+           chart: {
+               type: 'scatter',
+               zoomType: 'xy',
+               marginTop: 30,
+               height: (charts_run_mode ? 500 : 250),
+               style: {
+                 fontFamily: '"RobotoLightNew", "Ubuntu", helvetica, sans-serif'
+               }
+           },
+           xAxis: {
+               startOnTick: true,
+               endOnTick: true,
+               showLastLabel: true
+           },
+           plotOptions: {
+               scatter: {
+                   marker: {
+                       radius: 5,
+                       states: {
+                           hover: {
+                               enabled: true,
+                               lineColor: 'rgb(100,100,100)'
+                           }
+                       }
+                   },
+                   states: {
+                       hover: {
+                           marker: {
+                               enabled: false
+                           }
+                       }
+                   },
+                   tooltip: {
+                       headerFormat: '<b>{series.name}</b><br>',
+                       pointFormat: '{point.y}'
+                   }
+               }
+           },
+           legend: !chart_widget_mode,
+           data_transformer: function( options, labels, data ) {
+               options.xAxis.categories = $.map( data, function( e ) { return e[ 0 ] } );
+               var series = options.series = [];
+
+               for( var i = 0; i < labels.length; i++ )
+                   series.push( {
+                       name: labels[ i ],
+                       data: $.map( data, function( e ) { return e[ i + 1 ] } )
+                   } );
+           }
+       }
+   },
+
+     init: function( whenReady ) {
+       if (!window.Highcharts) {
+         $.getScript( '/libraries/highcharts/10.2.0/js/highcharts.js', whenReady);
+         $.getScript( '/libraries/highcharts/rounded-corners.js', whenReady);
+       } else {
+         whenReady && whenReady();
+       }
+     },
+
+     draw_chart: function( target, type, title, y_axis_label, labels, data, transpose ) {
+       //console.log('target', target, 'type', type, 'title', title, 'labels', labels, 'data', data, 'transpose', transpose);
+       if(transpose == true || transpose == "true"){
+           var new_data = [];
+           var new_labels = [];
+           for(var i = 0; i < data.length; i++){
+               new_labels.push(data[i][0]);
+               for(var j = 0; j < labels.length; j++){
+                   new_data[j] = [labels[j]];
+                   for(var k = 0; k < data.length; k++){
+                       new_data[j].push(data[k][j+1]);
+                   }
+               }
+           }
+           data = new_data;
+           labels = new_labels;
+           console.log('transpose chart, new data: ', data, 'labels', labels);
+       }
+       var options = $.extend( {}, custom_charts.DefaultTypes, custom_charts.OptionsByType[ type ] );
+       options.chart.renderTo = target;
+
+       if (chart_widget_mode) {
+         options.chart.height = chart_widget_mode_height;
+         options.chart.marginTop = chart_widget_mode_margin_top;
+       }
+
+       options.title = false;
+       options.credits = { enabled: false };
+       options.data_transformer( options, labels, data );
+       options.yAxis = {title: {text: y_axis_label}};
+       console.log('data', data);
+       console.log('options', options);
+       new Highcharts.setOptions({colors: ['#8fd385','#7dbe73','#5cbfab','#79d7c4']});
+       new Highcharts.Chart( options );
+     },
+
+     draw_selected_chart: function(sample_chart) {
+        custom_charts.draw_chart(sample_chart.find('> div.data-highcharts-chart').get(0), sample_chart.find('.chart_type').val(), '', sample_chart.data('y_axis_label'), sample_chart.data('labels'), sample_chart.data('chart_data'), sample_chart.find('.chart_transpose').is(':checked'));
+     }
+ }
+
+on_ready(function(){
+    $(document).on('reveal.facebox', function () {
+        //Filters
+        var $filter_column_select = $('.custom-report-filter-select-column');
+        filter_column_changed($filter_column_select);
+        $filter_column_select.change(function () {
+            filter_column_changed($(this));
+        });
+
+        if($('#filter_data').length > 0){
+            var filter_data = JSON.parse($('#filter_data').text());
+            switch(filter_data.type){
+                case 'boolean':
+                    $('#filter_value').val(filter_data.value);
+                    break;
+
+                case 'float':
+                case 'integer':
+                    $('.custom-report-filter-operator').val(filter_data.readable_op);
+                    $('#filter_value').val(filter_data.readable_value);
+                    break;
+
+                case 'datetime':
+                case 'date':
+                    if(filter_data.value !== null && filter_data.value.length > 0 && !/--/.test(filter_data.value) && !/NULL/.test(filter_data.value)){
+                        var from_to = filter_data.value.split(' AND ');
+                        $('#filter_from_value').val(from_to[0]);
+                        $('#filter_to_value').val(from_to[1]);
+                    }
+                    $('.custom-report-filter-operator').val(filter_data.readable_op);
+                    break;
+
+                case 'tags':
+                    $('#tags_selector').val(filter_data.value);
+                    init_filterable_select('tags_selector', filter_data.value.split(','), '/suggest_tags/list');
+
+                default:
+                    if(/enum\(/.test(filter_data.sql_type)){
+                        $('#filter_value').val(filter_data.readable_value);
+                    }else{
+                        $('.custom-report-filter-operator').val(filter_data.readable_op);
+                        $('#filter_value').val(filter_data.readable_value);
+                    }
+                    break;
+            }
+        }
+
+        $('#facebox, .modal.is-open').on('change', '.custom-report-filter-operator', function(){
+           switch($('.custom-report-filter-operator').val()){
+               case 'has value':
+               case 'has no value':
+                   $('#filter_from_value').hide();
+                   $('.date_filter_hyphen').hide();
+                   $('#filter_to_value').hide();
+                   $('.custom-report-filter-user-prompt').prop('checked', false).prop('disabled', true);
+                   $('.custom-report-filter-label').hide();
+                   break;
+               case 'on or later than':
+               case 'on or earlier than':
+                   if(!$('.custom-report-filter-user-prompt').is(':checked')) {
+                       $('#filter_from_value').show();
+                       $('.date_filter_hyphen').hide();
+                       $('#filter_to_value').hide();
+                   }
+                   $('.custom-report-filter-user-prompt').prop('disabled', false);
+                   break;
+               case 'date range':
+                   if(!$('.custom-report-filter-user-prompt').is(':checked')) {
+                       $('#filter_from_value').show();
+                       $('.date_filter_hyphen').show();
+                       $('#filter_to_value').show();
+                   }
+                   $('.custom-report-filter-user-prompt').prop('disabled', false);
+                   break;
+               default:
+                   $('.custom-report-filter-user-prompt').prop('disabled', false);
+                   break;
+           }
+        });
+
+        $('.custom-report-filter-user-prompt').change(function () {
+            if ($(this).is(':checked')) {
+                $('.custom-report-filter-select-column').nextAll('span, select:not(.custom-report-filter-operator), input[type="text"]').hide();
+                var default_label = $('.custom-report-filter-operator') ? get_option_text($('#filter_column')) + ' ' + get_option_text($('.custom-report-filter-operator')) : get_option_text($('#filter_column'));
+                $('.custom-report-filter-label').val(default_label).show();
+            } else {
+                $('.custom-report-filter-operator').change();
+                $('.custom-report-filter-label').hide();
+                $('.custom-report-filter-text-value, .custom-report-filter-select-value').show();
+            }
+        });
+
+        $('.custom-report-filter-user-prompt').change();
+        $('.custom-report-filter-operator').change();
+    });
+
+    //Columns
+    $('.custom_report_tab_columns').on('click', 'input[type="checkbox"]', function(){
+        if($(this).is(':checked')){
+            $('#column_action').val('add');
+        }else{
+            $('#column_action').val('delete');
+        }
+        var $name_input = $(this).siblings().eq($(this).index() + 1);
+        if(/related/.test($name_input.attr('name'))){
+            var rel_name = $name_input.attr('name').match(/related\[(.*?)\]/)[1] + '.';
+        }else{
+            var rel_name = '';
+        }
+        $('#selected_column').val(rel_name + $name_input.val());
+        $('#custom_report_columns_tab_form').ajaxSubmit();
+    });
+
+    //Grouping
+    $(document).on('reveal.facebox', function () {
+        if ($('#grouping_column').find(':selected').data('type') == 'date' || $('#grouping_column').find(':selected').data('type') == 'datetime') {
+            $('label[for=granularity], .custom-report-grouping-select-granularity').show();
+        }
+        $('#grouping_column').change(function () {
+            var selected_option = $(this).find(':selected');
+            if (selected_option.data('type') == 'date' || selected_option.data('type') == 'datetime') {
+                $('label[for=granularity], .custom-report-grouping-select-granularity').show();
+            } else {
+                $('label[for=granularity], .custom-report-grouping-select-granularity').hide();
+            }
+        });
+    });
+
+    //Summmary
+    $('.custom-report-summary-data-table input[type="checkbox"]').click(function(){
+        $('#save_summary_form').ajaxSubmit();
+    });
+
+    $('.custom-report-summary-data-table select').change(function(){
+        $('#save_summary_form').ajaxSubmit();
+    });
+
+    //Organize
+    if($(".custom_report_tab_organize").length > 0){
+        init_sortable_organize();
+        $('.custom_report_tab_organize input[type="text"]').change(function(){
+            $('#save_organize_form').ajaxSubmit();
+        });
+        $('.custom_report_tab_organize input[type="checkbox"]').click(function(){
+            $('#save_organize_form').ajaxSubmit();
+        });
+    }
+
+    //Charts
+    $('body').on('change', '.custom_report_tab_charts .chart_title, ' +
+        '.custom_report_tab_charts .chart_type', save_charts);
+
+    $('body').on('click', '.custom_report_tab_charts .chart_selector, ' +
+        '.custom_report_tab_charts .chart_transpose', save_charts);
+
+    $('body').on('change', '.custom_report_tab_charts .chart_type', function(){
+        var $chart = $(this).closest('.sample_chart');
+        custom_charts.draw_selected_chart($chart);
+    });
+
+    $('body').on('change', '.custom_report_tab_charts .chart_transpose', function(){
+        var $chart = $(this).closest('.sample_chart');
+        custom_charts.draw_selected_chart($chart);
+    });
+
+    $('.sample_chart').each(function(){
+        custom_charts.draw_selected_chart($(this));
+    });
+});
+
+function saveFormat(element, reportId, column) {
+  var isCustom = $(element).find('option:selected').attr('is-custom')
+  var elementId = $(element).attr('id');
+  if (isCustom == "true") {
+    var url = "/custom_report_organization/custom_format?id=" + reportId + "&element_id=" + elementId + "&column=" + encodeURIComponent(JSON.stringify(column));
+    $(element).attr("href", url);
+    return popup_clicked(element);
+  } else {
+    $("#save_organize_form").ajaxSubmit();
+  }
+}
+
+function saveCustomFormat(reportID, elementId, column) {
+  var object = {
+    url : "/custom_report_organization/save_custom_format",
+    data : {
+      id : reportID,
+      element_id : elementId,
+      column: column,
+      custom_format: $(".saveFormatPopup #custom_format").val()
+    }
+  };
+
+  $.ajax({
+    type : "POST",
+    url : object.url,
+    data : object.data,
+    dataType : "json",
+  }).done(function(data) {
+    if (data.error) {
+      $("#facebox").find(".error").remove();
+      $("#facebox").find("#alerts").after('<div class="alert_block error" role="alert"><div class="alert_flex"><div class="alert_icon"><i class="error inverted"></i></div><p>' + data.error + '</p><a href=""><i class="xCrossSmall"></i><span class="textOffScreen">Close alert</span></a></div></div>');
+    } else {
+      var optionValues = $("#" + data.element_id + " option").map(function(){ return $(this).val();}).get();
+
+      if (!optionValues.includes(data.custom_format)) {
+        var selectValue = $('<option selected="selected"></option>').val(data.custom_format).text(data.custom_value);
+
+        if (optionValues.slice(-1)[0] == "") {
+          $("#" + data.element_id).append(selectValue);
+        } else {
+          $("#" + data.element_id + " option").last().replaceWith(selectValue);
+        }
+      } else {
+        $("#facebox").find(".error").remove();
+        $("#facebox").find("#alerts").after('<div class="alert_block error" role="alert"><div class="alert_flex"><div class="alert_icon"><i class="error inverted"></i></div><p>' + "Format already present" + '</p><a href=""><i class="xCrossSmall"></i><span class="textOffScreen">Close alert</span></a></div></div>');
+        return false
+      }
+
+      $("#save_organize_form").ajaxSubmit();
+      $.facebox.close();
+    }
+  });
+  return false;
+}
+
+function loadFormatInfo(columnType) {
+  $("#" + columnType + "_info").show();
+}
